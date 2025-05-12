@@ -1,77 +1,144 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Column from './Column';
-import { DndContext, closestCenter } from '@dnd-kit/core';
-import {SortableContext, verticalListSortingStrategy
+import {
+  DndContext,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { getBoardData, saveBoardData } from '../services/boardService';
 
-const Board = ({ boardId }) => { // Burada her boarda özel id alıyoruz.
-  const [columns, setColumns] = useState({});
+const Board = () => {
+  const [cards, setCards] = useState([]);
+  const statuses = ['BACKLOG', 'TO_DO', 'IN_PROGRESS', 'DONE'];
 
+
+ 
+  const fetchCards = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/api/roadmap')
+      const data = await res.json()
+      if (data && Array.isArray(data.users)) {
+        setCards(data.users)
+      } else {
+        setCards([])
+      }
+    } catch (err) {
+      console.error('Veri çekilemedi:', err)
+      setCards([]) 
+    }
+  }
   useEffect(() => {
-    const stored = getBoardData(boardId); // Bu kod bloğu boardId her tetiklendiğinde setColumns'u localStorageden gelen stored ile set eder.
-    setColumns(stored);
-  }, [boardId]);
+    fetchCards() 
+  }, [])
+  
 
-  const updateColumns = (updated) => {// Bu kod bloğunda stateyi güncelleyip yeni hali localStorageye kaydediyoruz
-    setColumns(updated);
-    saveBoardData(boardId, updated);
+
+
+  
+  const handleAddCard = async (status) => {
+    const title = prompt('Kart başlığı:');
+    const description = prompt('Açıklama:');
+    if (!title || !description) return;
+
+    const newCard = {
+      title,
+      description,
+      status,
+    };
+
+    try {
+      const res = await fetch('http://localhost:3000/api/roadmap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCard),
+      });
+      const data = await res.json();
+      setCards((prevCards) => [...prevCards, data]); 
+    } catch (err) {
+      console.error('Kart eklenemedi:', err);
+    }
+    fetchCards()
   };
-// Sürükle bırak işlemleri 
-  const handleDragEnd = (event) => {
+
+  const handleDragEnd = async (event) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) return; // Sürüklenen ve bırakılan elemanları al aynı yere bırakıldıysa işlem yapma.
+    if (!over || active.id === over.id) return;
+  
+    const activeCard = cards.find((c) => c.id === active.id);
+    const overCard = cards.find((c) => c.id === over.id);
+ 
 
-    const fromColumnId = active.data.current.columnId;
-    const toColumnId = over.data.current.columnId;
+    if (!activeCard || !overCard) return;
 
-    const fromItems = [...columns[fromColumnId].items];
-    const toItems = [...columns[toColumnId].items];
+    if (activeCard.status === overCard.status) {
+      const sameStatusCards = cards.filter((c) => c.status === activeCard.status);
+      const oldIndex = sameStatusCards.findIndex((c) => c.id === active.id);
+      const newIndex = sameStatusCards.findIndex((c) => c.id === over.id);
+      const newOrder = arrayMove(sameStatusCards, oldIndex, newIndex);
 
-    const activeIndex = fromItems.findIndex(i => i.id === active.id);
-    const overIndex = toItems.findIndex(i => i.id === over.id);
-
-    const [movedItem] = fromItems.splice(activeIndex, 1);
-// Aynı listede sıralama değişikliği
-    if (fromColumnId === toColumnId) {
-      fromItems.splice(overIndex, 0, movedItem);
-      updateColumns({
-        ...columns,
-        [fromColumnId]: { ...columns[fromColumnId], items: fromItems }
-      });
+      const reorderedCards = cards
+        .filter((c) => c.status !== activeCard.status)
+        .concat(newOrder);
+    
+      setCards(reorderedCards);
     } else {
-      // Farklı listeye taşınıyorsa
-      toItems.splice(overIndex, 0, movedItem);
-      updateColumns({
-        ...columns,
-        [fromColumnId]: { ...columns[fromColumnId], items: fromItems },
-        [toColumnId]: { ...columns[toColumnId], items: toItems }
-      });
+      const newStatus = overCard.status;
+      const id = activeCard.id
+        const newCard = {
+          id,
+          newStatus
+        };
+        try {
+          const res = await fetch('http://localhost:3000/api/roadmap', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newCard),
+          });
+          const data = await res.json();
+          setCards((prevCards) => [...prevCards, data]); 
+        } catch (err) {
+          console.error('Kart eklenemedi:', err);
+        }
+        fetchCards()
+      setCards((prev) =>
+        prev.map((card) =>
+          card.id === active.id ? { ...card, status: overCard.status } : card
+        )
+      );
     }
   };
 
+  const sensors = useSensors(useSensor(PointerSensor));
+  
+
   return (
-    <DndContext
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="board">
-        {Object.entries(columns).map(([key, column]) => (
-          <SortableContext
-            key={key}
-            items={column.items.map(item => item.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <Column
-              columnId={key}
-              column={column}
-              columns={columns}
-              setColumns={updateColumns}
-            />
+    <div className='board'>
+      <h1 className='boardTitle'>Kanban Board</h1>
+      <DndContext
+        collisionDetection={closestCorners}
+        onDragEnd={handleDragEnd}
+        sensors={sensors}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', margin: '0 20px' }}>
+          <SortableContext items={statuses} strategy={horizontalListSortingStrategy}>
+            {statuses.map((status) => (
+              <Column
+                key={status}
+                status={status}
+                cards={cards.filter((card) => card.status === status)}
+                onAddCard={handleAddCard}
+              />
+            ))}
           </SortableContext>
-        ))}
-      </div>
-    </DndContext>
+        </div>
+      </DndContext>
+    </div>
   );
 };
 

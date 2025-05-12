@@ -1,41 +1,24 @@
+import React from 'react';
 import Card from './Card';
-import { v4 as uuidv4 } from 'uuid';// Benzersiz bir id üretebilmek için.
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 
-const Column = ({ columnId, column, columns, setColumns }) => {
-  const handleAddCard = () => {
-  const title = prompt('Kart başlığı:'); // Başlığı al
-  if (!title) return;
-
-  const content = prompt('Kart içeriği:'); // İçeriği al
-  if (!content) return;
-
-  const newCard = {//Yeni kartı oluşturduk.
-    id: uuidv4(),
-    title, // Başlık
-    content // İçerik
-  };
-
-  const updatedItems = [...column.items, newCard];// Yeni kartı ekliyoruz
-  const updatedColumns = {
-    ...columns,
-    [columnId]: { ...column, items: updatedItems }
-  };
-  setColumns(updatedColumns); //Yeni kartı set ediyoruz.
-};
-
+const Column = ({ status, cards, onAddCard }) => {
   return (
-    <div className="column">
-      <h2>{column.name}</h2>
-      <div className="card-list">
-        {column.items.map((item) => (// Her bir items Card bileşenini döndürüyoruz.
-          <Card
-            key={item.id}
-            item={item}
-            columnId={columnId}
-          />
-        ))}
-      </div>
-      <button className="button" onClick={handleAddCard}>✏️ Kart Ekle</button>
+    <div className="column" data-status={status}>
+      <h2 className="status">{status}</h2>
+      <SortableContext items={cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+        {cards.length === 0 ? (
+          <p>Bu statüde kart yok.</p>
+        ) : (
+          cards.map((card) => <Card key={card.id} {...card} />)
+        )}
+      </SortableContext>
+      <button className="button" onClick={() => onAddCard(status)}>
+        + Kart Ekle
+      </button>
     </div>
   );
 };
